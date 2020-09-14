@@ -58,12 +58,12 @@ T1=$mridir/T1.mgz
 tmpT1=${T1/.mgz/.nii.gz}
 mri_convert $T1 $tmpT1 >/dev/null
 command_check "T1 conversion to nifti"
-fsl_anat -i $tmpT1 -o $subdir/mri/T1 --clobber \
-  --noreorient \
-  --nocrop \
-  --nobias \
-  --noseg \
-  --nosubcortseg >/dev/null
+fsl_anat -i $tmpT1 -o $subdir/mri/T1 --clobber >/dev/null
+#  --noreorient \
+#  --nocrop \
+#  --nobias \
+#  --noseg \
+#  --nosubcortseg >/dev/null
 command_check "FSL anatomical processing"
 rm $tmpT1
 
