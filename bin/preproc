@@ -155,7 +155,7 @@ elif [[ $1 == -h || $1 == --help ]]; then
   echo "                      regress out here, which will be less aggressive.)"
   echo "  --fdrms <thr>       Detect motion outliers using FDRMS metric. (See FMRIB"
   echo "                      Technical Report TR99MJ1.) Set your own threshold in mm."
-  echo "                      [default: 1.5]"
+  echo "                      [default: 1.75]"
   echo "  --dvars <thr>       Detect motion outliers using DVARS metric (see Power et"
   echo "                      al 2012). Set you own threshold in PSC * 10. "
   echo "                      [default: 75% + 1.5*IQR]"
@@ -527,6 +527,9 @@ if (( $ststage <= 1 )); then
   # don't do high-pass filtering in feat, so we can use ica aroma.
   sed -i 's@\(set fmri(temphp_yn)\)\(.*\)@\1 '0'@' $fsf
 
+  # run outlier detection first to get valid fdrms values REL added
+  fsl_motion_outliers -i $input -o $tmpdir/fdrms.confound.txt --fdrms --thresh=${fdrms} -p $tmpdir/fdrms.png -s $tmpdir/fdrms.values.txt
+
   # running feat
   echo "(id=$id) Running feat..." | tee -a $log
   # send only the stderr to tee
@@ -761,36 +764,40 @@ if (( $ststage <= 5 )); then
   echo "(id=$id) Checking for motion spikes (fdrms metric)..." | tee -a $log
   # important if re-starting
   rm $featdir/art/fdrms.* 2>/dev/null
-  cp $featdir/mc/prefiltered_func_data_mcf_rel.rms $featdir/art/fdrms.values.txt
+  # cp $featdir/mc/prefiltered_func_data_mcf_rel.rms $featdir/art/fdrms.values.txt
+  mv $tmpdir/fdrms.confound.txt $featdir/art/. # REL added the next three lines
+  mv $tmpdir/fdrms.png $featdir/art/.
+  grep -n "1" $featdir/art/fdrms.confound.txt | grep -Eo '^[^:]+' > $featdir/art/fdrms.drops.txt
+  mv $tmpdir/fdrms.values.txt $featdir/art/fdrms.values.txt
 
-  idx=0
-  fdrms_vals=`cat $featdir/art/fdrms.values.txt`
-  for val in $fdrms_vals; do
-    compar=`echo "$val >= $fdrms" | bc -l`
-    if [[ $compar == 1 ]]; then
-      printf '%d\t%.3f\n' $(($idx + 1)) $val >> $featdir/art/fdrms.drops.txt
-      zpadidx=`printf '%03d' $idx`
-      make_spike_reg $nvols $idx $tmpdir/fdrms-$zpadidx.txt
-    fi
-    idx=$(($idx + 1))
-  done
-  TEST=`ls $tmpdir | grep 'fdrms-[0-9]\{3\}\.txt'`
-  if [[ -n $TEST ]]; then
-    paste $tmpdir/fdrms-*txt >> $featdir/art/fdrms.confound.txt
-  fi
+  #idx=0
+  #fdrms_vals=`cat $featdir/art/fdrms.values.txt`
+  #for val in $fdrms_vals; do
+  #  compar=`echo "$val >= $fdrms" | bc -l`
+  #  if [[ $compar == 1 ]]; then
+  #    printf '%d\t%.3f\n' $(($idx + 1)) $val >> $featdir/art/fdrms.drops.txt
+  #    zpadidx=`printf '%03d' $idx`
+  #    make_spike_reg $nvols $idx $tmpdir/fdrms-$zpadidx.txt
+  #  fi
+  #  idx=$(($idx + 1))
+  #done
+  #TEST=`ls $tmpdir | grep 'fdrms-[0-9]\{3\}\.txt'`
+  #if [[ -n $TEST ]]; then
+  #  paste $tmpdir/fdrms-*txt >> $featdir/art/fdrms.confound.txt
+  #fi
 
   # make fdrms plot
-  for i in `seq 0 $(($nvols - 1))`; do
-    echo $fdrms >> $tmpdir/fdrmsthr_ts.txt
-  done
-  fdrms_ymin=0
-  fdrms_ymax1=`calcmax $fdrms_vals`
-  fdrms_ymax2=`echo "$fdrms * 1.5" | bc -l`
-  fdrms_ymax=`calcmax $fdrms_ymax1 $fdrms_ymax2`
-  fsl_tsplot -i $featdir/art/fdrms.values.txt,$tmpdir/fdrmsthr_ts.txt \
-    -o $featdir/art/fdrms.png \
-    -t "FDRMS values (thresh=$fdrms)" \
-    --ymin=$fdrms_ymin --ymax=$fdrms_ymax 2>&1 1>/dev/null | tee -a $log
+  #for i in `seq 0 $(($nvols - 1))`; do
+  #  echo $fdrms >> $tmpdir/fdrmsthr_ts.txt
+  #done
+  #fdrms_ymin=0
+  #fdrms_ymax1=`calcmax $fdrms_vals`
+  #fdrms_ymax2=`echo "$fdrms * 1.5" | bc -l`
+  #fdrms_ymax=`calcmax $fdrms_ymax1 $fdrms_ymax2`
+  #fsl_tsplot -i $featdir/art/fdrms.values.txt,$tmpdir/fdrmsthr_ts.txt \
+  #  -o $featdir/art/fdrms.png \
+  #  -t "FDRMS values (thresh=$fdrms)" \
+  #  --ymin=$fdrms_ymin --ymax=$fdrms_ymax 2>&1 1>/dev/null | tee -a $log
 
   echo "(id=$id) Checking for motion spikes (dvars metric)..." | tee -a $log
   if [[ -n $dvars ]]; then
